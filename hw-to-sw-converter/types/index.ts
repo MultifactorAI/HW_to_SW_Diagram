@@ -11,10 +11,12 @@ export interface HardwareComponent {
 export interface SoftwareModule {
   id: string;
   name: string;
-  layer: 'application' | 'service' | 'driver' | 'hal' | 'kernel';
+  layer: 'application' | 'service' | 'middleware' | 'driver' | 'hal' | 'kernel';
   dependencies: string[];
   interfaces: string[];
   hardwareMapping?: string; // ID of corresponding hardware component
+  description?: string;
+  responsibilities?: string[];
 }
 
 // Software architecture
@@ -72,3 +74,23 @@ export interface ApiResponse<T> {
   data?: T;
   error?: string;
 }
+
+// New types for API generation
+export interface GeneratedAPI {
+  moduleId: string;
+  moduleName: string;
+  language: 'typescript' | 'python' | 'c' | 'java';
+  content: string;
+  dataStructures?: string;
+  examples?: string;
+  timestamp: Date;
+}
+
+export interface BlockDetails {
+  module: SoftwareModule;
+  connectedModules: SoftwareModule[];
+  relatedRequirements: Requirement[];
+  apis?: GeneratedAPI[];
+}
+
+export type ProgrammingLanguage = 'typescript' | 'python' | 'c' | 'java';

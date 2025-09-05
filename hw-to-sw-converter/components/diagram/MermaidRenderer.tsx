@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import mermaid from 'mermaid';
 import { Download, ZoomIn, ZoomOut, Maximize2, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -9,6 +9,7 @@ interface MermaidRendererProps {
   diagram: string;
   className?: string;
   highlightedModules?: string[];
+  onBlockClick?: (blockId: string) => void;
 }
 
 // Track initialization
@@ -36,18 +37,48 @@ if (typeof window !== 'undefined' && !mermaidInitialized) {
   mermaidInitialized = true;
 }
 
-export function MermaidRenderer({ diagram, className, highlightedModules = [] }: MermaidRendererProps) {
+export function MermaidRenderer({ diagram, className, highlightedModules = [], onBlockClick }: MermaidRendererProps) {
   const [scale, setScale] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [isRendering, setIsRendering] = useState(false);
   const [svgContent, setSvgContent] = useState<string>('');
   const containerRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<HTMLDivElement>(null);
   
   // Memoize the highlighted modules string to prevent infinite loops
   const highlightedModulesKey = useMemo(
     () => highlightedModules.sort().join(','),
     [highlightedModules]
   );
+
+  // Add click handlers to diagram blocks
+  const attachClickHandlers = useCallback(() => {
+    if (!svgRef.current || !onBlockClick) return;
+
+    // Find all clickable elements (nodes in the diagram)
+    const nodes = svgRef.current.querySelectorAll('.node');
+    
+    nodes.forEach((node) => {
+      const nodeElement = node as HTMLElement;
+      const nodeId = nodeElement.id;
+      
+      // Skip nodes that are "more" indicators or hardware components
+      if (nodeId && !nodeId.includes('_more') && !nodeId.includes('hw_')) {
+        nodeElement.style.cursor = 'pointer';
+        nodeElement.addEventListener('click', () => {
+          onBlockClick(nodeId);
+        });
+        
+        // Add hover effect
+        nodeElement.addEventListener('mouseenter', () => {
+          nodeElement.style.opacity = '0.8';
+        });
+        nodeElement.addEventListener('mouseleave', () => {
+          nodeElement.style.opacity = '1';
+        });
+      }
+    });
+  }, [onBlockClick]);
 
   useEffect(() => {
     if (!diagram) {
@@ -80,6 +111,11 @@ export function MermaidRenderer({ diagram, className, highlightedModules = [] }:
           modulesToHighlight.forEach(moduleId => {
             processedDiagram += `  class ${moduleId} highlight;\n`;
           });
+        }
+
+        // Add clickable class for interactive nodes
+        if (onBlockClick) {
+          processedDiagram += '\n  classDef clickable cursor:pointer;\n';
         }
 
         // Render the diagram
@@ -130,7 +166,18 @@ export function MermaidRenderer({ diagram, className, highlightedModules = [] }:
     return () => {
       cancelled = true;
     };
-  }, [diagram, highlightedModulesKey]);
+  }, [diagram, highlightedModulesKey, onBlockClick]);
+
+  // Attach click handlers after SVG is rendered
+  useEffect(() => {
+    if (svgContent && !isRendering) {
+      // Small delay to ensure DOM is updated
+      const timer = setTimeout(() => {
+        attachClickHandlers();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [svgContent, isRendering, attachClickHandlers]);
 
   const handleZoomIn = () => {
     setScale(prev => Math.min(prev + 0.1, 2));
@@ -221,6 +268,7 @@ export function MermaidRenderer({ diagram, className, highlightedModules = [] }:
           )}
           {!isRendering && !error && svgContent && (
             <div 
+              ref={svgRef}
               className="w-full"
               dangerouslySetInnerHTML={{ __html: svgContent }}
             />

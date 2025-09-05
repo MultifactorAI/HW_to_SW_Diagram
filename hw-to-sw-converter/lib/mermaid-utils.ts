@@ -7,6 +7,7 @@ export function generateMermaidDiagram(
   const layers = {
     application: [] as SoftwareModule[],
     service: [] as SoftwareModule[],
+    middleware: [] as SoftwareModule[],
     driver: [] as SoftwareModule[],
     hal: [] as SoftwareModule[],
     kernel: [] as SoftwareModule[],
@@ -39,6 +40,15 @@ export function generateMermaidDiagram(
   if (layers.service.length > 0) {
     mermaid += '    subgraph "Service Layer"\n';
     layers.service.forEach(module => {
+      mermaid += `      ${module.id}["${module.name}"]\n`;
+    });
+    mermaid += '    end\n';
+  }
+
+  // Middleware Layer
+  if (layers.middleware.length > 0) {
+    mermaid += '    subgraph "Middleware Layer"\n';
+    layers.middleware.forEach(module => {
       mermaid += `      ${module.id}["${module.name}"]\n`;
     });
     mermaid += '    end\n';
@@ -166,6 +176,7 @@ export function generateMermaidDiagram(
   // Style the diagram with better colors and spacing
   mermaid += '\n  classDef appClass fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,color:#000;\n';
   mermaid += '  classDef serviceClass fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#000;\n';
+  mermaid += '  classDef middlewareClass fill:#e1f5fe,stroke:#0277bd,stroke-width:2px,color:#000;\n';
   mermaid += '  classDef driverClass fill:#fff3e0,stroke:#ef6c00,stroke-width:2px,color:#000;\n';
   mermaid += '  classDef halClass fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#000;\n';
   mermaid += '  classDef kernelClass fill:#fce4ec,stroke:#c2185b,stroke-width:2px,color:#000;\n';
@@ -178,6 +189,9 @@ export function generateMermaidDiagram(
   });
   layers.service.forEach(m => {
     mermaid += `  class ${m.id} serviceClass;\n`;
+  });
+  layers.middleware.forEach(m => {
+    mermaid += `  class ${m.id} middlewareClass;\n`;
   });
   layers.driver.forEach(m => {
     mermaid += `  class ${m.id} driverClass;\n`;
@@ -228,6 +242,7 @@ export function parseMermaidToModules(mermaidDiagram: string): SoftwareModule[] 
   const layerMap: Record<string, SoftwareModule['layer']> = {
     'Application Layer': 'application',
     'Service Layer': 'service',
+    'Middleware Layer': 'middleware',
     'Driver Layer': 'driver',
     'HAL Layer': 'hal',
     'OS/Kernel': 'kernel',

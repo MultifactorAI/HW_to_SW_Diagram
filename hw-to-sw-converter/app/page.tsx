@@ -5,16 +5,21 @@ import { FileUploader } from '@/components/upload/FileUploader';
 import { RequirementsInput } from '@/components/upload/RequirementsInput';
 import { MermaidRenderer } from '@/components/diagram/MermaidRenderer';
 import { RequirementsList } from '@/components/requirements/RequirementsList';
+import { BlockDetailsPanel } from '@/components/diagram/BlockDetailsPanel';
 import { 
   AnalysisResult, 
   SoftwareArchitecture, 
+  SoftwareModule,
   Requirement,
-  DiffResult 
+  DiffResult,
+  GeneratedAPI,
+  ProgrammingLanguage
 } from '@/types';
 import { 
   calculateRequirementsDiff, 
   generateDiffSummary 
 } from '@/lib/diff-utils';
+import { parseMermaidToModules } from '@/lib/mermaid-utils';
 import { 
   ArrowRight, 
   Loader2, 
@@ -22,7 +27,8 @@ import {
   GitCompare,
   Cpu,
   FileCode,
-  CheckCircle
+  CheckCircle,
+  MousePointer
 } from 'lucide-react';
 
 export default function Home() {
@@ -37,6 +43,11 @@ export default function Home() {
   const [previousRequirements, setPreviousRequirements] = useState<Requirement[]>([]);
   const [diffResult, setDiffResult] = useState<DiffResult | null>(null);
   const [showDiff, setShowDiff] = useState(false);
+  
+  // New states for block details
+  const [selectedModule, setSelectedModule] = useState<SoftwareModule | null>(null);
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [modules, setModules] = useState<SoftwareModule[]>([]);
 
   const handleFileUpload = (file: File, base64: string) => {
     setImageBase64(base64);
@@ -76,6 +87,15 @@ export default function Home() {
       setPreviousRequirements([]);
       setDiffResult(null);
       setShowDiff(false);
+      
+      // Parse modules from the architecture
+      if (data.data.architecture?.modules) {
+        setModules(data.data.architecture.modules);
+      } else if (data.data.architecture?.mermaidDiagram) {
+        // Fallback: parse modules from mermaid diagram
+        const parsedModules = parseMermaidToModules(data.data.architecture.mermaidDiagram);
+        setModules(parsedModules);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to analyze diagram');
       console.error('Analysis error:', err);
@@ -124,6 +144,51 @@ export default function Home() {
     setDiffResult(null);
     setShowDiff(false);
     setError(null);
+    setSelectedModule(null);
+    setIsPanelOpen(false);
+    setModules([]);
+  };
+
+  const handleBlockClick = (blockId: string) => {
+    const module = modules.find(m => m.id === blockId);
+    if (module) {
+      setSelectedModule(module);
+      setIsPanelOpen(true);
+    }
+  };
+
+  const handleGenerateAPI = async (moduleId: string, language: ProgrammingLanguage): Promise<GeneratedAPI> => {
+    const module = modules.find(m => m.id === moduleId);
+    if (!module) {
+      throw new Error('Module not found');
+    }
+
+    const relatedRequirements = currentRequirements
+      .filter(req => req.relatedModules.includes(moduleId))
+      .map(req => req.description);
+
+    const response = await fetch('/api/generate-api', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        module,
+        language,
+        context: {
+          requirements: relatedRequirements,
+          connectedModules: module.dependencies,
+        },
+      }),
+    });
+
+    const data = await response.json();
+    
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to generate API');
+    }
+
+    return data.data;
   };
 
   return (
@@ -224,12 +289,19 @@ export default function Home() {
 
             {/* Software Architecture Diagram */}
             <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
-              <h2 className="text-2xl font-semibold text-gray-800 mb-6">
-                Software Architecture Diagram
-              </h2>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-semibold text-gray-800">
+                  Software Architecture Diagram
+                </h2>
+                <div className="flex items-center space-x-2 text-sm text-gray-600">
+                  <MousePointer className="w-4 h-4" />
+                  <span>Click on any block to view details and generate API</span>
+                </div>
+              </div>
               <MermaidRenderer
                 diagram={architecture.mermaidDiagram}
                 highlightedModules={diffResult?.impactedModules}
+                onBlockClick={handleBlockClick}
               />
             </div>
 
@@ -265,6 +337,15 @@ export default function Home() {
           </>
         )}
       </div>
+
+      {/* Block Details Panel */}
+      <BlockDetailsPanel
+        isOpen={isPanelOpen}
+        onClose={() => setIsPanelOpen(false)}
+        module={selectedModule}
+        requirements={currentRequirements}
+        onGenerateAPI={handleGenerateAPI}
+      />
     </main>
   );
 }
